@@ -33696,7 +33696,6 @@ SELECT
     STRUCT<
       metric STRING,
       metric_type STRING,
-      metric_type_2 STRING,
       key STRING,
       process STRING,
       agg_type STRING,
@@ -33704,7 +33703,6 @@ SELECT
       value ARRAY<STRUCT<key STRING, value INT64>>
     >(
       metric,
-      udf_get_histogram_type(value),
       metric_type,
       '',
       process,

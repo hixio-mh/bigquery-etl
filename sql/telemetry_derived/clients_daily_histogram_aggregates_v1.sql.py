@@ -31,7 +31,7 @@ p.add_argument(
 p.add_argument(
     "--wait-seconds",
     type=int,
-    default=10,
+    default=0,
     help="Add a delay before executing the script to allow time for the xcom sidecar to complete startup",
 )
 
@@ -267,7 +267,7 @@ def get_histogram_probes_sql_strings(probes_and_buckets, histogram_type):
 
     sql_strings = {}
     if histogram_type == "keyed_histograms":
-        return _get_keyed_histogram_sql(probes_and_buckets)  # TODO
+        return _get_keyed_histogram_sql(probes_and_buckets)
 
     probe_structs = []
     for probe, details in probes.items():
@@ -527,4 +527,8 @@ def main(argv, out=print):
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    print(json.dumps(
+        {k: list(v["processes"]) for k, v in get_histogram_probes_and_buckets("histograms")["probes"].items()},
+        indent=4,
+        sort_keys=True,
+    ))
