@@ -21,47 +21,6 @@ AS
           return JSON.parse(y);
         ''';
 
-CREATE TEMP FUNCTION udf_get_histogram_type(histograms ARRAY<STRING>) AS (
-  (
-    SELECT
-      CASE
-        SAFE_CAST(JSON_EXTRACT(histogram, "$.histogram_type") AS INT64)
-      WHEN
-        0
-      THEN
-        'histogram-exponential'
-      WHEN
-        1
-      THEN
-        'histogram-linear'
-      WHEN
-        2
-      THEN
-        'histogram-boolean'
-      WHEN
-        3
-      THEN
-        'histogram-flag'
-      WHEN
-        4
-      THEN
-        'histogram-count'
-      WHEN
-        5
-      THEN
-        'histogram-categorical'
-      END
-      AS histogram_type
-    FROM
-      UNNEST(histograms) AS histogram
-    WHERE
-      histogram IS NOT NULL
-      AND JSON_EXTRACT(histogram, "$.histogram_type") IS NOT NULL
-    LIMIT
-      1
-  )
-);
-
 CREATE TEMP FUNCTION udf_aggregate_json_sum(histograms ARRAY<STRING>) AS (
   ARRAY(
     SELECT AS STRUCT

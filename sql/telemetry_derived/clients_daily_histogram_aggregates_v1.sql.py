@@ -68,22 +68,6 @@ def generate_sql(opts, additional_queries, windowed_clause, select_clause, json_
 
         {string_to_arr}
 
-        CREATE TEMP FUNCTION udf_get_histogram_type(histograms ARRAY<STRING>) AS ((
-            SELECT
-              CASE SAFE_CAST(JSON_EXTRACT(histogram, "$.histogram_type") AS INT64)
-                WHEN 0 THEN 'histogram-exponential'
-                WHEN 1 THEN 'histogram-linear'
-                WHEN 2 THEN 'histogram-boolean'
-                WHEN 3 THEN 'histogram-flag'
-                WHEN 4 THEN 'histogram-count'
-                WHEN 5 THEN 'histogram-categorical'
-              END AS histogram_type
-            FROM UNNEST(histograms) AS histogram
-            WHERE histogram IS NOT NULL
-              AND JSON_EXTRACT(histogram, "$.histogram_type") IS NOT NULL
-            LIMIT 1
-        ));
-
         CREATE TEMP FUNCTION
           udf_aggregate_json_sum(histograms ARRAY<STRING>) AS (ARRAY(
               SELECT
@@ -131,8 +115,8 @@ def _get_keyed_histogram_sql(probes_and_buckets):
     buckets = probes_and_buckets["buckets"]
 
     probes_struct = []
-    for probe, processes in probes.items():
-        for process in processes:
+    for probe, details in probes.items():
+        for process in details["processes"]:
             probe_location = (
                 f"payload.keyed_histograms.{probe}"
                 if process == "parent"
@@ -146,6 +130,7 @@ def _get_keyed_histogram_sql(probes_and_buckets):
 
             agg_string = (
                 f"('{probe}', "
+                f"'histogram-{details['type']}', "
                 f"'{process}', "
                 f"{probe_location}, "
                 f"({buckets_for_probe}))"
@@ -158,6 +143,7 @@ def _get_keyed_histogram_sql(probes_and_buckets):
 
     probes_string = """
         metric,
+        metric_type,
         key,
         ARRAY_AGG(bucket_range) as bucket_range,
         ARRAY_AGG(value) as value
@@ -175,6 +161,7 @@ def _get_keyed_histogram_sql(probes_and_buckets):
             normalized_channel AS channel,
             ARRAY<STRUCT<
                 name STRING,
+                metric_type STRING,
                 process STRING,
                 value ARRAY<STRUCT<key STRING, value STRING>>,
                 bucket_range STRUCT<first_bucket INT64, last_bucket INT64, num_buckets INT64>
@@ -194,6 +181,7 @@ def _get_keyed_histogram_sql(probes_and_buckets):
               channel,
               process,
               metrics.name AS metric,
+              metrics.metric_type AS metric_type,
               bucket_range,
               value.key AS key,
               value.value AS value
@@ -222,6 +210,7 @@ def _get_keyed_histogram_sql(probes_and_buckets):
                 channel,
                 process,
                 metric,
+                metric_type,
                 key
     """
 
@@ -247,7 +236,7 @@ def _get_keyed_histogram_sql(probes_and_buckets):
                 value ARRAY<STRUCT<key STRING, value INT64>>
             >(
                 metric,
-                udf_get_histogram_type(value),
+                metric_type,
                 key,
                 process,
                 'summed_histogram',
