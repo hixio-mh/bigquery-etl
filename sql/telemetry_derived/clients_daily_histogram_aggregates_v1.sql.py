@@ -320,14 +320,12 @@ def get_histogram_probes_sql_strings(probes_and_buckets, histogram_type):
           ARRAY_AGG(STRUCT<
             metric STRING,
             metric_type STRING,
-            metric_type_2 STRING,
             key STRING,
             process STRING,
             agg_type STRING,
             bucket_range STRUCT<first_bucket INT64, last_bucket INT64, num_buckets INT64>,
             value ARRAY<STRUCT<key STRING, value INT64>>
           > (metric,
-            udf_get_histogram_type(value),
             metric_type,
             '',
             process,
