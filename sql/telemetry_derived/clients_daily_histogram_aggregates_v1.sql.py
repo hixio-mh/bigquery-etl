@@ -31,7 +31,7 @@ p.add_argument(
 p.add_argument(
     "--wait-seconds",
     type=int,
-    default=0,
+    default=10,
     help="Add a delay before executing the script to allow time for the xcom sidecar to complete startup",
 )
 
@@ -278,11 +278,11 @@ def get_histogram_probes_sql_strings(probes_and_buckets, histogram_type):
 
     sql_strings = {}
     if histogram_type == "keyed_histograms":
-        return _get_keyed_histogram_sql(probes_and_buckets)
+        return _get_keyed_histogram_sql(probes_and_buckets)  # TODO
 
     probe_structs = []
-    for probe, processes in probes.items():
-        for process in processes:
+    for probe, details in probes.items():
+        for process in details["processes"]:
             probe_location = (
                 f"payload.histograms.{probe}"
                 if process == "parent"
@@ -296,6 +296,7 @@ def get_histogram_probes_sql_strings(probes_and_buckets, histogram_type):
 
             agg_string = (
                 f"('{probe}', "
+                f"'histogram-{details['type']}', "
                 f"'{process}', "
                 f"{probe_location}, "
                 f"({buckets_for_probe}))"
@@ -308,6 +309,7 @@ def get_histogram_probes_sql_strings(probes_and_buckets, histogram_type):
     probes_string = f"""
             ARRAY<STRUCT<
                 metric STRING,
+                metric_type STRING,
                 process STRING,
                 value STRING,
                 bucket_range STRUCT<first_bucket INT64, last_bucket INT64, num_buckets INT64>
@@ -329,6 +331,7 @@ def get_histogram_probes_sql_strings(probes_and_buckets, histogram_type):
           ARRAY_AGG(STRUCT<
             metric STRING,
             metric_type STRING,
+            metric_type_2 STRING,
             key STRING,
             process STRING,
             agg_type STRING,
@@ -336,6 +339,7 @@ def get_histogram_probes_sql_strings(probes_and_buckets, histogram_type):
             value ARRAY<STRUCT<key STRING, value INT64>>
           > (metric,
             udf_get_histogram_type(value),
+            metric_type,
             '',
             process,
             'summed_histogram',
@@ -370,6 +374,7 @@ def get_histogram_probes_sql_strings(probes_and_buckets, histogram_type):
             app_build_id,
             channel,
             metric,
+            metric_type,
             process,
             bucket_range,
             value
@@ -391,12 +396,13 @@ def get_histogram_probes_sql_strings(probes_and_buckets, histogram_type):
         app_build_id,
         channel,
         metric,
+        metric_type,
         process,
         ARRAY_AGG(bucket_range) AS bucket_range,
         ARRAY_AGG(value) AS value
       FROM filtered_aggregates
       GROUP BY
-        1, 2, 3, 4, 5, 6, 7, 8
+        1, 2, 3, 4, 5, 6, 7, 8, 9
     """
 
     return sql_strings
@@ -471,7 +477,7 @@ def get_histogram_probes_and_buckets(histogram_type):
 
         bucket_details = {}
         relevant_probes = {
-            histogram: process
+            histogram: {"processes": process}
             for histogram, process in main_summary_histograms.items()
             if histogram in histogram_probes
         }
@@ -488,6 +494,9 @@ def get_histogram_probes_and_buckets(histogram_type):
 
             data_details = data[key]["history"][channel][0]["details"]
             probe = key.replace("histogram/", "").replace(".", "_").lower()
+
+            if probe in relevant_probes:
+                relevant_probes[probe]["type"] = data_details["kind"]
 
             # NOTE: some probes, (e.g. POPUP_NOTIFICATION_MAINACTION_TRIGGERED_MS) have values
             # in the probe info service like 80 * 25 for the value of n_buckets.
