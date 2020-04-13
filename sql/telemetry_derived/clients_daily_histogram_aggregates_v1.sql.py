@@ -527,8 +527,4 @@ def main(argv, out=print):
 
 
 if __name__ == "__main__":
-    print(json.dumps(
-        {k: list(v["processes"]) for k, v in get_histogram_probes_and_buckets("histograms")["probes"].items()},
-        indent=4,
-        sort_keys=True,
-    ))
+    main(sys.argv)
