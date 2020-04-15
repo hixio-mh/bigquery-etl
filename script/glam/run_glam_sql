@@ -41,8 +41,9 @@ function replace_project_dataset {
 function run_query {
     local destination_table=$1
     local time_partition=${2:-false}
-    local min_sample_id=${3:-0}
-    local max_sample_id=${4:-99}
+    local clustering_fields=${3}  # comma-separated list of clustering fields
+    local min_sample_id=${4:-12}
+    local max_sample_id=${5:-12}
     local query="sql/$PROD_DATASET/$destination_table/query.sql"
 
     # add an option to write to a time-partitioned table
@@ -63,7 +64,9 @@ function run_query {
         --parameter="submission_date:DATE:$SUBMISSION_DATE" \
         --parameter="min_sample_id:INT64:$min_sample_id" \
         --parameter="max_sample_id:INT64:$max_sample_id" \
-        "$(if $time_partition; then echo --time_partitioning_type="DAY"; fi)" \
+        $(if $time_partition; then echo --time_partitioning_type="DAY"; fi) \
+        $(if $time_partition; then echo --time_partitioning_field="submission_date"; fi) \
+        $(if [ -n "$clustering_fields" ]; then echo --clustering_fields="$clustering_fields"; fi) \
         < "$tmp"
 }
 
@@ -116,8 +119,8 @@ function run_desktop_sql {
     run_init "clients_histogram_aggregates_v1"
     run_init "clients_histogram_bucket_counts_v1"
 
-    run_query "clients_histogram_aggregates_v1" true 0 0
-    run_query "clients_histogram_bucket_counts_v1" true
+    run_query "clients_histogram_aggregates_v1" true "sample_id,app_version,channel" 0 0
+    run_query "clients_histogram_bucket_counts_v1"
     run_query "clients_histogram_probe_counts_v1"
 }
 
