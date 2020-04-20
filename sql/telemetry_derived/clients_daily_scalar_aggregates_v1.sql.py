@@ -7,7 +7,11 @@ import argparse
 import textwrap
 import subprocess
 import urllib.request
+from pathlib import Path
 from time import sleep
+
+sys.path.append(str(Path(__file__).parent.parent.parent.resolve()))
+from bigquery_etl.format_sql.formatter import reformat
 
 
 PROBE_INFO_SERVICE = (
@@ -18,7 +22,7 @@ p = argparse.ArgumentParser()
 p.add_argument(
     "--agg-type",
     type=str,
-    help="One of scalar/keyed-scalar/keyed-boolean",
+    help="One of scalars/keyed_scalars/keyed_booleans",
     required=True,
 )
 p.add_argument(
@@ -60,7 +64,9 @@ def generate_sql(
                 AND normalized_channel in (
                   "release", "beta", "nightly"
                 )
-                AND client_id IS NOT NULL),
+                AND client_id IS NOT NULL
+                AND sample_id BETWEEN @min_sample_id AND @max_sample_id
+                ),
 
         {additional_queries}
 
@@ -84,7 +90,7 @@ def generate_sql(
                 channel
                 {additional_partitions})
 
-            {select_clause}
+        {select_clause}
         """
     )
 
@@ -449,14 +455,16 @@ def main(argv, out=print):
 
     sleep(opts['wait_seconds'])
     out(
-        generate_sql(
-            opts["agg_type"],
-            sql_string["probes_string"],
-            sql_string.get("additional_queries", ""),
-            sql_string.get("additional_partitions", ""),
-            sql_string["select_clause"],
-            sql_string.get("querying_table", "filtered"),
-            opts["json_output"],
+        reformat(
+            generate_sql(
+                opts["agg_type"],
+                sql_string["probes_string"],
+                sql_string.get("additional_queries", ""),
+                sql_string.get("additional_partitions", ""),
+                sql_string["select_clause"],
+                sql_string.get("querying_table", "filtered"),
+                opts["json_output"],
+            )
         )
     )
 
