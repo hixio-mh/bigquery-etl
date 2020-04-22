@@ -39,13 +39,14 @@ function replace_project_dataset {
 
 
 function run_query {
-    local destination_table=$1
+    local query_name=$1
     local time_partition=${2:-false}
     local clustering_fields=${3}  # comma-separated list of clustering fields
     local min_sample_id=${4:-0}  # TODO: change default sample back
     local max_sample_id=${5:-99}
-    local query="sql/$PROD_DATASET/$destination_table/query.sql"
-
+    local append=${6:-false}
+    local destination_table=${7:-$1}
+    local query="sql/$PROD_DATASET/$query_name/query.sql"
     # add an option to write to a time-partitioned table
     if $time_partition; then
         destination_table="${destination_table}\$${SUBMISSION_DATE//-/}"
@@ -57,7 +58,7 @@ function run_query {
     bq query \
         --max_rows=0 \
         --use_legacy_sql=false \
-        --replace \
+        $(if $append; then echo --append_table; else echo --replace; fi) \
         --project_id="$PROJECT" \
         --dataset_id="$DATASET" \
         --destination_table="$destination_table" \
@@ -103,10 +104,14 @@ function run_view {
 }
 
 
-function generate_desktop_sql {
+function generate_and_run_desktop_sql {
     local probe_type=$1
+    local append=${2:-false}
     local script_type
-    local query_directory
+    local query_name
+    local destination_table
+
+    echo "generating sql for ${probe_type}"
 
     case $probe_type in
         histogram | keyed_histogram)
@@ -121,47 +126,59 @@ function generate_desktop_sql {
             ;;
     esac
 
-    query_directory="sql/${PROD_DATASET}/clients_daily_${probe_type}_aggregates_v1"
+    query_name="clients_daily_${probe_type}_aggregates_v1"
+    destination_table="clients_daily_${script_type}_aggregates_v1"
 
-    python3 "sql/${PROD_DATASET}/clients_daily_${script_type}_aggregates_v1.sql.py" \
+    python3 "sql/${PROD_DATASET}/${destination_table}.sql.py" \
         "--agg-type=${probe_type}s" \
-         > "${query_directory}/query.sql"
+         > "sql/${PROD_DATASET}/${query_name}/query.sql"
 
-    echo "clients_daily_${probe_type}_aggregates_v1"
+    run_query $query_name true "app_version,channel" 12 12 $append $destination_table
 }
 
 
 function run_desktop_sql {
-    #local prod_project="moz-fx-data-shared-prod"
-    #local tables_to_copy=(
-    #    "latest_versions"
-    #    "clients_histogram_aggregates_new_v1"
-    #)
+    local start_stage=${START_STAGE:-0}
+    local prod_project="moz-fx-data-shared-prod"
+    local tables_to_copy=(
+        "latest_versions"
+        "clients_histogram_aggregates_new_v1"
+    )
 
-    ## TODO - make these computable rather than copying.
-    #for table in "${tables_to_copy[@]}"; do
-    #    echo "Copying table $table"
-    #    bq cp --no_clobber "${prod_project}:${PROD_DATASET}.$table" "${PROJECT}:${DATASET}.$table";
-    #done
+    if ((start_stage <= 0)); then
+        # TODO - make these computable rather than copying.
+        for table in "${tables_to_copy[@]}"; do
+            echo "Copying table $table"
+            bq cp --no_clobber "${prod_project}:${PROD_DATASET}.$table" "${PROJECT}:${DATASET}.$table";
+        done
+    fi
+    if ((start_stage <= 1)); then
+        run_init "clients_daily_histogram_aggregates_v1"
+        run_init "clients_daily_scalar_aggregates_v1"
 
-    probe_types=("scalar" "keyed_boolean" "keyed_scalar" "histogram" "keyed_histogram")
-    for probe_type in ${probe_types[@]}; do
-        echo "generating sql for ${probe_type}"
-        query_name="$(generate_desktop_sql $probe_type)"
+        generate_and_run_desktop_sql "scalar" false
+        generate_and_run_desktop_sql "keyed_scalar" true
+        generate_and_run_desktop_sql "keyed_boolean" true
+        generate_and_run_desktop_sql "histogram" false
+        generate_and_run_desktop_sql "keyed_histogram" true
+    fi
+    if ((start_stage <= 2)); then
+        run_init "clients_scalar_aggregates_v1"
 
-        if [ "scalar" == $probe_type ] || [ "histogram" == $probe_type ]; then
-            run_init $query_name
-        fi
+        run_query "clients_scalar_aggregates_v1" false "" 12 12
+        run_query "clients_scalar_bucket_counts_v1"
+        run_query "clients_scalar_probe_counts_v1" false "" 0 0 false "client_probe_counts_v1"
+    fi
+    if ((start_stage <= 3)); then
+        run_init "clients_histogram_aggregates_v1"
+        run_init "clients_histogram_bucket_counts_v1"
 
-        run_query $query_name true "app_version,channel" 12 12
-    done
-
-    #run_init "clients_histogram_aggregates_v1"
-    #run_init "clients_histogram_bucket_counts_v1"
-
-    #run_query "clients_histogram_aggregates_v1" true "sample_id,app_version,channel" 12 12
-    #run_query "clients_histogram_bucket_counts_v1"
-    #run_query "clients_histogram_probe_counts_v1"
+        run_query "clients_histogram_aggregates_v1" true "sample_id,app_version,channel" 12 12
+        run_query "clients_histogram_bucket_counts_v1"
+        run_query "clients_histogram_probe_counts_v1" false "" 0 0 false "client_probe_counts_v1"
+    fi
+    run_query "glam_user_counts_v1"
+    run_query "glam_user_counts_extract_v1"
 }
 
 
