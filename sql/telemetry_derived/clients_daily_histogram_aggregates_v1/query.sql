@@ -78,7 +78,13 @@ CREATE TEMP FUNCTION udf_aggregate_json_sum(histograms ARRAY<STRING>) AS (
   )
 );
 
-WITH filtered AS (
+WITH valid_build_ids AS (
+  SELECT
+    DISTINCT(build.build.id) AS build_id
+  FROM
+    `moz-fx-data-shared-prod.telemetry.buildhub2`
+),
+filtered AS (
   SELECT
     *,
     SPLIT(application.version, '.')[OFFSET(0)] AS app_version,
@@ -88,10 +94,15 @@ WITH filtered AS (
     normalized_channel AS channel
   FROM
     `moz-fx-data-shared-prod.telemetry_stable.main_v4`
+  LEFT JOIN
+    valid_build_ids
+  ON
+    (application.build_id = build_id)
   WHERE
     DATE(submission_timestamp) = @submission_date
     AND normalized_channel IN ("release", "beta", "nightly")
     AND client_id IS NOT NULL
+    AND build_id IS NOT NULL
 ),
 histograms AS (
   SELECT
@@ -612,6 +623,18 @@ histograms AS (
         (1, 2, 3)
       ),
       ('bad_fallback_font', 'parent', payload.histograms.bad_fallback_font, (1, 2, 3)),
+      (
+        'base_font_families_per_page',
+        'content',
+        payload.processes.content.histograms.base_font_families_per_page,
+        (1, 256, 64)
+      ),
+      (
+        'base_font_families_per_page',
+        'parent',
+        payload.histograms.base_font_families_per_page,
+        (1, 256, 64)
+      ),
       ('bfcache_combo', 'content', payload.processes.content.histograms.bfcache_combo, (1, 50, 51)),
       ('bfcache_combo', 'parent', payload.histograms.bfcache_combo, (1, 50, 51)),
       (
@@ -675,6 +698,18 @@ histograms AS (
         'parent',
         payload.histograms.br_9_2_2_subject_common_name,
         (1, 8, 9)
+      ),
+      (
+        'browser_attribution_errors',
+        'content',
+        payload.processes.content.histograms.browser_attribution_errors,
+        (1, 50, 51)
+      ),
+      (
+        'browser_attribution_errors',
+        'parent',
+        payload.histograms.browser_attribution_errors,
+        (1, 50, 51)
       ),
       (
         'browser_is_assist_default',
@@ -2219,6 +2254,12 @@ histograms AS (
         'parent',
         payload.histograms.cookie_leave_secure_alone,
         (1, 10, 11)
+      ),
+      (
+        'cookie_samesite_set_vs_unset',
+        'parent',
+        payload.histograms.cookie_samesite_set_vs_unset,
+        (1, 2, 3)
       ),
       (
         'cookie_scheme_https',
@@ -4975,6 +5016,39 @@ histograms AS (
         (1, 50, 51)
       ),
       ('extension_update_type', 'parent', payload.histograms.extension_update_type, (1, 50, 51)),
+      (
+        'fallback_to_base_font',
+        'content',
+        payload.processes.content.histograms.fallback_to_base_font,
+        (1, 2, 3)
+      ),
+      ('fallback_to_base_font', 'parent', payload.histograms.fallback_to_base_font, (1, 2, 3)),
+      (
+        'fallback_to_langpack_font',
+        'content',
+        payload.processes.content.histograms.fallback_to_langpack_font,
+        (1, 2, 3)
+      ),
+      (
+        'fallback_to_langpack_font',
+        'parent',
+        payload.histograms.fallback_to_langpack_font,
+        (1, 2, 3)
+      ),
+      (
+        'fallback_to_prefs_font',
+        'content',
+        payload.processes.content.histograms.fallback_to_prefs_font,
+        (1, 2, 3)
+      ),
+      ('fallback_to_prefs_font', 'parent', payload.histograms.fallback_to_prefs_font, (1, 2, 3)),
+      (
+        'fallback_to_user_font',
+        'content',
+        payload.processes.content.histograms.fallback_to_user_font,
+        (1, 2, 3)
+      ),
+      ('fallback_to_user_font', 'parent', payload.histograms.fallback_to_user_font, (1, 2, 3)),
       ('family_safety', 'content', payload.processes.content.histograms.family_safety, (1, 16, 17)),
       ('family_safety', 'parent', payload.histograms.family_safety, (1, 16, 17)),
       (
@@ -8037,6 +8111,18 @@ histograms AS (
         (1, 2, 3)
       ),
       (
+        'http_saw_quic_alt_protocol_2',
+        'content',
+        payload.processes.content.histograms.http_saw_quic_alt_protocol_2,
+        (1, 3, 4)
+      ),
+      (
+        'http_saw_quic_alt_protocol_2',
+        'parent',
+        payload.histograms.http_saw_quic_alt_protocol_2,
+        (1, 3, 4)
+      ),
+      (
         'http_scheme_upgrade',
         'content',
         payload.processes.content.histograms.http_scheme_upgrade,
@@ -8866,6 +8952,18 @@ histograms AS (
         (1, 200000, 50)
       ),
       (
+        'langpack_font_families_per_page',
+        'content',
+        payload.processes.content.histograms.langpack_font_families_per_page,
+        (1, 256, 64)
+      ),
+      (
+        'langpack_font_families_per_page',
+        'parent',
+        payload.histograms.langpack_font_families_per_page,
+        (1, 256, 64)
+      ),
+      (
         'link_icon_sizes_attr_dimension',
         'content',
         payload.processes.content.histograms.link_icon_sizes_attr_dimension,
@@ -9633,6 +9731,22 @@ histograms AS (
         payload.histograms.memoryblockcache_errors,
         (1, 16, 17)
       ),
+      ('missing_font', 'content', payload.processes.content.histograms.missing_font, (1, 2, 3)),
+      ('missing_font', 'parent', payload.histograms.missing_font, (1, 2, 3)),
+      (
+        'missing_font_langpack',
+        'content',
+        payload.processes.content.histograms.missing_font_langpack,
+        (1, 2, 3)
+      ),
+      ('missing_font_langpack', 'parent', payload.histograms.missing_font_langpack, (1, 2, 3)),
+      (
+        'missing_font_user',
+        'content',
+        payload.processes.content.histograms.missing_font_user,
+        (1, 2, 3)
+      ),
+      ('missing_font_user', 'parent', payload.histograms.missing_font_user, (1, 2, 3)),
       (
         'mixed_content_hsts',
         'content',
@@ -10579,6 +10693,7 @@ histograms AS (
       ('network_id', 'parent', payload.histograms.network_id, (1, 6, 7)),
       ('network_id2', 'parent', payload.histograms.network_id2, (1, 6, 7)),
       ('network_id_online', 'parent', payload.histograms.network_id_online, (1, 50, 51)),
+      ('network_pac_url_scheme', 'parent', payload.histograms.network_pac_url_scheme, (1, 50, 51)),
       (
         'network_probe_maxcount',
         'content',
@@ -15169,6 +15284,18 @@ histograms AS (
         'transaction_wait_time_http',
         'parent',
         payload.histograms.transaction_wait_time_http,
+        (1, 5000, 100)
+      ),
+      (
+        'transaction_wait_time_http3',
+        'content',
+        payload.processes.content.histograms.transaction_wait_time_http3,
+        (1, 5000, 100)
+      ),
+      (
+        'transaction_wait_time_http3',
+        'parent',
+        payload.histograms.transaction_wait_time_http3,
         (1, 5000, 100)
       ),
       (
@@ -25046,6 +25173,18 @@ histograms AS (
       ),
       ('user_chrome_css_loaded', 'parent', payload.histograms.user_chrome_css_loaded, (1, 2, 3)),
       (
+        'user_font_families_per_page',
+        'content',
+        payload.processes.content.histograms.user_font_families_per_page,
+        (1, 256, 64)
+      ),
+      (
+        'user_font_families_per_page',
+        'parent',
+        payload.histograms.user_font_families_per_page,
+        (1, 256, 64)
+      ),
+      (
         'vfc_clearcurrentframe_lock_hold_ms',
         'content',
         payload.processes.content.histograms.vfc_clearcurrentframe_lock_hold_ms,
@@ -25526,6 +25665,18 @@ histograms AS (
         'parent',
         payload.histograms.web_audio_becomes_audible_time,
         (1, 60, 10)
+      ),
+      (
+        'web_font_families_per_page',
+        'content',
+        payload.processes.content.histograms.web_font_families_per_page,
+        (1, 256, 64)
+      ),
+      (
+        'web_font_families_per_page',
+        'parent',
+        payload.histograms.web_font_families_per_page,
+        (1, 256, 64)
       ),
       (
         'web_notification_clicked',
@@ -26847,6 +26998,13 @@ histograms AS (
         (1, 2, 3)
       ),
       ('webvtt_used_vtt_cues', 'parent', payload.histograms.webvtt_used_vtt_cues, (1, 2, 3)),
+      (
+        'window_open_outer_size',
+        'content',
+        payload.processes.content.histograms.window_open_outer_size,
+        (1, 2, 3)
+      ),
+      ('window_open_outer_size', 'parent', payload.histograms.window_open_outer_size, (1, 2, 3)),
       (
         'window_remote_subframes_enabled_status',
         'parent',
